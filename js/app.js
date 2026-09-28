@@ -7,11 +7,70 @@ function errText(e){return e?.message||String(e)}
 if(!cfg.supabaseUrl||!cfg.supabaseAnonKey){document.body.innerHTML='<main class="configerror panel"><h1>Configuration required</h1><p>Open <code>config.js</code> and enter the Supabase project URL and publishable/anon key. See README.md.</p></main>'} else { sb=supabase.createClient(cfg.supabaseUrl,cfg.supabaseAnonKey); boot(); }
 async function boot(){
   const {data:{session}}=await sb.auth.getSession(); if(session) await enter(session.user); else showLogin();
-  sb.auth.onAuthStateChange(async(_e,s)=>{if(s?.user&&!USER) await enter(s.user); if(!s){USER=PROFILE=null;showLogin()}});
+  sb.auth.onAuthStateChange(async(e,s)=>{
+  if(e==='PASSWORD_RECOVERY'){
+    showPasswordReset();
+    return;
+  }
+  if(s?.user&&!USER) await enter(s.user);
+  if(!s){USER=PROFILE=null;showLogin()}
+});
   $('#loginf').onsubmit=login; $('#logout').onclick=()=>sb.auth.signOut();
   if('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
 }
 function showLogin(){ $('#authscreen').hidden=false; $('#appscreen').hidden=true; }
+function showPasswordReset(){
+  $('#authscreen').hidden=false;
+  $('#appscreen').hidden=true;
+  $('#authscreen').innerHTML=`
+    <main class="panel" style="max-width:480px;margin:80px auto">
+      <h1>Set New Password</h1>
+      <p>Enter a new password for your Armory Inventory Manager account.</p>
+      <form id="resetpwform">
+        <label>New Password</label>
+        <input id="newpassword" type="password" minlength="8" required>
+        <label>Confirm New Password</label>
+        <input id="confirmpassword" type="password" minlength="8" required>
+        <button type="submit">Set Password</button>
+        <p id="resetmsg" class="msg"></p>
+      </form>
+    </main>`;
+  $('#resetpwform').onsubmit=setNewPassword;
+}
+
+async function setNewPassword(e){
+  e.preventDefault();
+  const password=val($('#newpassword'));
+  const confirm=val($('#confirmpassword'));
+  const msg=$('#resetmsg');
+
+  if(password!==confirm){
+    say(msg,'Passwords do not match.',false);
+    return;
+  }
+
+  if(password.length<8){
+    say(msg,'Password must be at least 8 characters.',false);
+    return;
+  }
+
+  say(msg,'Updating password...');
+
+  const {error}=await sb.auth.updateUser({password});
+
+  if(error){
+    say(msg,errText(error),false);
+    return;
+  }
+
+  say(msg,'Password updated successfully.');
+
+  setTimeout(async()=>{
+    const {data:{session}}=await sb.auth.getSession();
+    if(session?.user) await enter(session.user);
+    else showLogin();
+  },1000);
+}
 async function login(e){e.preventDefault();say($('#loginmsg'),'Signing in…');const {error}=await sb.auth.signInWithPassword({email:val($('#loginemail')).trim(),password:val($('#loginpw'))});if(error)say($('#loginmsg'),error.message,false)}
 async function enter(user){USER=user;const {data,error}=await sb.from('profiles').select('*').eq('id',user.id).single();if(error||!data?.active){await sb.auth.signOut();say($('#loginmsg'),'Account profile is missing or inactive. Contact an administrator.',false);return}PROFILE=data;$('#who').textContent=`${PROFILE.display_name} · ${PROFILE.role}`;$('#authscreen').hidden=true;$('#appscreen').hidden=false;applyRole();wire();await loadBase();await dash();}
 function applyRole(){const review=['ADMIN','SUPERVISOR'].includes(PROFILE.role),write=['ADMIN','SUPERVISOR','ARMORER'].includes(PROFILE.role);if(!review)$('[data-v="approvals"]').classList.add('rolehidden');if(!write){$('[data-v="scan"]').classList.add('rolehidden');$('[data-v="movement"]').classList.add('rolehidden');$('[data-v="admin"]').classList.add('rolehidden')}if(PROFILE.role!=='ADMIN')$('#admin .grid2')?.children[1]?.classList?.add('rolehidden')}
