@@ -35,8 +35,19 @@ async function boot(){
   }
 
   $('#loginf').onsubmit=login;
-  $('#logout').onclick=()=>sb.auth.signOut();
+  $('#logout').onclick = async () => {
+  const { error } = await sb.auth.signOut();
 
+  if (error) {
+    console.error('Sign out failed:', error);
+    alert('Sign out failed: ' + error.message);
+    return;
+  }
+
+  USER = null;
+  PROFILE = null;
+  showLogin();
+};
   if('serviceWorker' in navigator)
     navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
 }
