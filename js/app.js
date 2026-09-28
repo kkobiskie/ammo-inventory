@@ -34,7 +34,8 @@ async function boot(){
     else showLogin();
   }
 
-  $('#loginf').onsubmit=login;
+  const loginForm = $('#loginf');
+if (loginForm) loginForm.onsubmit = login;
   $('#logout').onclick = async () => {
   const { error } = await sb.auth.signOut();
 
