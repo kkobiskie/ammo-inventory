@@ -6,17 +6,39 @@ function val(el){return el?.value??''}
 function errText(e){return e?.message||String(e)}
 if(!cfg.supabaseUrl||!cfg.supabaseAnonKey){document.body.innerHTML='<main class="configerror panel"><h1>Configuration required</h1><p>Open <code>config.js</code> and enter the Supabase project URL and publishable/anon key. See README.md.</p></main>'} else { sb=supabase.createClient(cfg.supabaseUrl,cfg.supabaseAnonKey); boot(); }
 async function boot(){
-  const {data:{session}}=await sb.auth.getSession(); if(session) await enter(session.user); else showLogin();
+  let recovering=false;
+
   sb.auth.onAuthStateChange(async(e,s)=>{
-  if(e==='PASSWORD_RECOVERY'){
-    showPasswordReset();
-    return;
+    if(e==='PASSWORD_RECOVERY'){
+      recovering=true;
+      showPasswordReset();
+      return;
+    }
+
+    if(recovering) return;
+
+    if(s?.user&&!USER) await enter(s.user);
+    if(!s){
+      USER=PROFILE=null;
+      showLogin();
+    }
+  });
+
+  // Give Supabase a moment to process a recovery link before
+  // deciding whether to display the normal application/login screen.
+  await new Promise(resolve=>setTimeout(resolve,500));
+
+  if(!recovering){
+    const {data:{session}}=await sb.auth.getSession();
+    if(session) await enter(session.user);
+    else showLogin();
   }
-  if(s?.user&&!USER) await enter(s.user);
-  if(!s){USER=PROFILE=null;showLogin()}
-});
-  $('#loginf').onsubmit=login; $('#logout').onclick=()=>sb.auth.signOut();
-  if('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
+
+  $('#loginf').onsubmit=login;
+  $('#logout').onclick=()=>sb.auth.signOut();
+
+  if('serviceWorker' in navigator)
+    navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
 }
 function showLogin(){ $('#authscreen').hidden=false; $('#appscreen').hidden=true; }
 function showPasswordReset(){
